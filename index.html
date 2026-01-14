@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>금지어 뽑기</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; padding: 24px; }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    .card { border: 1px solid #ddd; border-radius: 16px; padding: 18px; }
+    h1 { margin: 0 0 10px; font-size: 20px; }
+    .muted { color: #666; font-size: 13px; margin: 0 0 14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill {
+      padding: 10px 12px; border: 1px solid #ddd; border-radius: 999px;
+      min-width: 110px; text-align:center; font-weight: 800;
+    }
+    button {
+      padding: 10px 14px; border-radius: 12px; border: 1px solid #999;
+      background:#fff; cursor:pointer;
+    }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .screen { display:none; }
+    .screen.active { display:block; }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    li { margin: 8px 0; line-height: 1.35; }
+    .danger { color: #c00; font-weight: 800; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <!-- 화면 1: 뽑기 -->
+    <div class="card screen active" id="screenPick">
+      <div class="topbar">
+        <h1>🎰 금지어 뽑기</h1>
+        <span class="muted">30개 중 3개 랜덤</span>
+      </div>
+
+      <p class="muted">“뽑기”를 누르면 로또처럼 돌아가다가 멈추면서 3개가 확정돼.</p>
+
+      <div class="row" style="margin: 10px 0 14px;">
+        <div class="pill" id="w1">-</div>
+        <div class="pill" id="w2">-</div>
+        <div class="pill" id="w3">-</div>
+      </div>
+
+      <div class="row">
+        <button id="btnSpin">뽑기</button>
+        <button id="btnNext" disabled>다음</button>
+        <button id="btnReset" disabled>다시</button>
+      </div>
+    </div>
+
+    <!-- 화면 2: 규칙 -->
+    <div class="card screen" id="screenRules">
+      <div class="topbar">
+        <h1>📜 규칙</h1>
+        <button id="btnBack">← 돌아가기</button>
+      </div>
+
+      <p class="muted">이번 판 금지어 3개</p>
+      <div class="row" style="margin-bottom: 10px;">
+        <div class="pill" id="r1">-</div>
+        <div class="pill" id="r2">-</div>
+        <div class="pill" id="r3">-</div>
+      </div>
+
+      <ul>
+        <li><b>규칙 1.</b> 금지어는 <b>전체가 다 모일 때까지</b> 말하지 않기
+          <span class="danger">(만약 그 전에 말하면 미워할거야)</span></li>
+        <li><b>규칙 2.</b> 금지어를 꼭 기억하기 (사진, 기록)</li>
+        <li><b>규칙 3.</b> 상대방이 그 단어를 쓰도록 유도하기! (말하면서 금지어 글자가 나오기!)</li>
+      </ul>
+
+      <div class="row" style="margin-top: 14px;">
+        <button id="btnNewRound">새 판 뽑기</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ✅ 30개 단어는 여기만 바꾸면 됨
+    const WORDS = [
+      "아니", "근데", "진짜", "대박", "헐",
+      "어쩔", "망했다", "최고", "싫어", "좋아",
+      "배고파", "피곤", "졸려", "미쳤다", "꿀잼",
+      "노잼", "오케이", "잠깐", "일단", "맞아",
+      "뭐지", "왜", "이거", "저거", "그거",
+      "가자", "멈춰", "조용", "게임", "한잔"
+    ];
+
+    // 엘리먼트
+    const screenPick  = document.getElementById("screenPick");
+    const screenRules = document.getElementById("screenRules");
+
+    const w1 = document.getElementById("w1");
+    const w2 = document.getElementById("w2");
+    const w3 = document.getElementById("w3");
+
+    const r1 = document.getElementById("r1");
+    const r2 = document.getElementById("r2");
+    const r3 = document.getElementById("r3");
+
+    const btnSpin  = document.getElementById("btnSpin");
+    const btnNext  = document.getElementById("btnNext");
+    const btnReset = document.getElementById("btnReset");
+    const btnBack  = document.getElementById("btnBack");
+    const btnNewRound = document.getElementById("btnNewRound");
+
+    let picked = [];
+    let spinning = false;
+    let timer = null;
+
+    function showScreen(which) {
+      screenPick.classList.remove("active");
+      screenRules.classList.remove("active");
+      which.classList.add("active");
+    }
+
+    // 중복 없이 3개 뽑기
+    function pick3Unique() {
+      const pool = [...WORDS];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, 3);
+    }
+
+    // 로또처럼 돌아가는 효과
+    function spin() {
+      if (spinning) return;
+      spinning = true;
+
+      btnSpin.disabled = true;
+      btnNext.disabled = true;
+      btnReset.disabled = true;
+
+      const spinTotalMs = 1700;
+      const tickMs = 60;
+      const start = Date.now();
+
+      timer = setInterval(() => {
+        // 임시 표시(돌아가는 느낌)
+        w1.textContent = WORDS[Math.floor(Math.random() * WORDS.length)];
+        w2.textContent = WORDS[Math.floor(Math.random() * WORDS.length)];
+        w3.textContent = WORDS[Math.floor(Math.random() * WORDS.length)];
+
+        if (Date.now() - start >= spinTotalMs) {
+          clearInterval(timer);
+          timer = null;
+
+          picked = pick3Unique();
+          w1.textContent = picked[0];
+          w2.textContent = picked[1];
+          w3.textContent = picked[2];
+
+          spinning = false;
+          btnNext.disabled = false;
+          btnReset.disabled = false;
+        }
+      }, tickMs);
+    }
+
+    function resetPick() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      spinning = false;
+      picked = [];
+
+      w1.textContent = "-";
+      w2.textContent = "-";
+      w3.textContent = "-";
+
+      btnSpin.disabled = false;
+      btnNext.disabled = true;
+      btnReset.disabled = true;
+    }
+
+    function goRules() {
+      if (spinning || picked.length !== 3) return;
+
+      // 규칙 화면에 방금 뽑은 금지어 표시
+      r1.textContent = picked[0];
+      r2.textContent = picked[1];
+      r3.textContent = picked[2];
+
+      showScreen(screenRules);
+    }
+
+    // 이벤트
+    btnSpin.addEventListener("click", spin);
+    btnReset.addEventListener("click", resetPick);
+    btnNext.addEventListener("click", goRules);
+
+    btnBack.addEventListener("click", () => showScreen(screenPick));
+    btnNewRound.addEventListener("click", () => {
+      resetPick();
+      showScreen(screenPick);
+    });
+  </script>
+</body>
+</html>
+
